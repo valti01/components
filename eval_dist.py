@@ -74,8 +74,8 @@ class CompressImage:
         pic = np.transpose(pic.numpy(), (1, 2, 0))
         pic = pic.reshape(3072)
         picr = np.dot(np.dot(pic, self.V[label][:self.n_comps, :].T), self.V[label][:self.n_comps, :])
-        picr = picr.reshape((32, 32, 3))
-        pic_tensor = torch.from_numpy(picr.transpose((2, 0, 1))).float()
+        picr = picr.reshape((1, 32, 32, 3))
+        pic_tensor = torch.from_numpy(picr.transpose((0, 3, 1, 2))).float()
         return pic_tensor
 
     def __init__(self, n_comps, targetlabel, randomseed=10):
@@ -184,7 +184,7 @@ def predict_adv(net, loader, device, attack, eps, is_ood, n_restart):
 
 
 def split_data(ds, size=1000, seed=100):
-    size=1000
+    size = 1000
     n = len(ds)
     rnd_state = np.random.RandomState(seed=seed)
     indices = np.arange(0, n)
@@ -193,6 +193,7 @@ def split_data(ds, size=1000, seed=100):
 
     split = Subset(ds, indices=indices)
     return split
+
 
 def main(params, device):
     print(params)
@@ -203,12 +204,14 @@ def main(params, device):
     model.to(device)
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=transforms.ToTensor())
-    fulltestloader = torch.utils.data.DataLoader(testset, batch_size=params.batch_size,
-                                             shuffle=False, num_workers=1)
+    fulltestloader = torch.utils.data.DataLoader(testset, batch_size=params.batch_size, shuffle=False, num_workers=1)
+    full_pred_in = predict(model, fulltestloader, device)
+
+    if params.size != 10000:
+        testset = split_data(testset, size=params.size, seed=params.seed)
+
     testloader = torch.utils.data.DataLoader(testset, batch_size=params.batch_size,
                                              shuffle=False, num_workers=1)
-    pred_in = predict(model, testloader, device)
-    full_pred_in = predict(model, fulltestloader, device)
 
     if params.pred_fname is not None:
         newmodel = ResNet50(10)
@@ -217,42 +220,37 @@ def main(params, device):
         newmodel.to(device)
         full_pred_in = predict(newmodel, fulltestloader, device)
 
-
-    testset = split_data(testset, size=1000)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=params.batch_size,
-                                             shuffle=False, num_workers=1)
-
     l = [x for (x, y) in testloader]
     x_test = torch.cat(l, 0)
     x_test = x_test.detach().numpy()
 
-
-    number = 300
-    compressed = FaceLandmarksDataset(root='./data', train=False, preds=full_pred_in, download=True, transform=None)
+    componentnumber = params.init_comps
+    transform = CustomTransform(componentnumber, params.targetlabel, randomseed=params.randomseed)
+    compressed = FaceLandmarksDataset(root='./data', train=False, preds=full_pred_in, download=True,
+                                      transform=transform)
     compressed = split_data(compressed, size=1000)
 
-    transform = CustomTransform(number, params.targetlabel, randomseed=params.randomseed)
-    while number > 1:
-        transformed_compressed = [transform(img, target, pred).reshape(1, 3, 32, 32) for (img, target), pred in
-                                  zip(compressed, full_pred_in)]
-        x_test_ood = np.concatenate(transformed_compressed, axis=0)
+    while componentnumber > 1:
+        l = [x for (x, y) in compressed]
+        x_test_ood = torch.cat(l, 0)
+        x_test_ood = x_test_ood.detach().numpy()
 
-        #distance = np.max(np.abs(x_test - x_test_ood), axis=(1,2,3))
+        # distance = np.max(np.abs(x_test - x_test_ood), axis=(1,2,3))
         distance = np.sqrt(np.sum((x_test - x_test_ood) ** 2, axis=(1, 2, 3)))
         if np.min(distance) >= 1:
             break
-        print(f"current number:{number} current minimum distance: {np.min(distance)}")
-        number -= 1
-        transform.compress_image.n_comps = number
+        print(f"current number:{componentnumber} current minimum distance: {np.min(distance)}")
+        componentnumber -= 1
+        transform.compress_image.n_comps = componentnumber
 
-    print(f"components needed using {params.targetlabel} to get at least that distance: ", number)
+    print(f"components needed using {params.targetlabel} to get at least that distance: ", componentnumber)
     print("Percentage of distances greater than 1: ", np.mean(distance > 1))
     print("Min distance: ", np.min(distance))
     print("Max distance: ", np.max(distance))
     print("Average distance: ", np.mean(distance))
     print("Median distance: ", np.median(distance))
     stats = []
-    stats.append({'components': number,
+    stats.append({'components': componentnumber,
                   'label': params.targetlabel,
                   'greater_than_1': np.mean(distance > 1),
                   'min_distance': np.min(distance),
@@ -260,12 +258,11 @@ def main(params, device):
                   'average_distance': np.mean(distance),
                   'median_distance': np.median(distance)
                   })
-    is_exist = os.path.exists("1000image_100seed_distances.csv")
-    with open("1000image_100seed_distances.csv", mode='a+', newline='') as out_f:
+    with open(params.out_fname, mode='a+', newline='') as out_f:
         args = vars(params)
         fieldnames = sorted(set(stats[0].keys()).union(args.keys()))
         writer = csv.DictWriter(out_f, fieldnames=fieldnames)
-        if not is_exist:
+        if not os.path.exists(params.out_fname):
             writer.writeheader()
         for i in range(len(stats)):
             writer.writerow({**args, **stats[i]})
@@ -277,19 +274,14 @@ if __name__ == '__main__':
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--fname", type=str, required=True)
     parser.add_argument("--pred_fname", type=str)
-    parser.add_argument("--ood_filter", type=str, default="cifar10-compressed")
-    parser.add_argument("--out_fname", type=str)
-    parser.add_argument("--obj", type=str, default="ul")
-    parser.add_argument("--steps", type=int, default=2)
-    parser.add_argument("--comps", type=int, default=150)
-    parser.add_argument("--targetlabel", type=str, default="1")
-    parser.add_argument("--n_restarts", type=int, default=1)
-    parser.add_argument("--imgdir", type=str, default="images")
-    parser.add_argument("--randomseed", type=int, default=10)
-    # parser.add_argument("--abs_stepsize", type=float, default=0.1)
-    parser.add_argument("--eps_in", type=float, default=0.5)
-    parser.add_argument("--eps_out", type=float, default=0.5)
-    parser.add_argument("--batch_size", type=int, default=250)
+    parser.add_argument("--out_fname", type=str, required=True)
+    parser.add_argument("--init_comps", type=int, default=300)
+    parser.add_argument("--targetlabel", type=str, default="all", help="Options: all, random, second, own, 0-9")
+    parser.add_argument("--randomseed", type=int, default=10, help="For targetlabel: random")
+    parser.add_argument("--batch_size", type=int, default=500)
+    parser.add_argument("--seed", type=int, default=100)
+    parser.add_argument("--size", type=int, default=1000)
+
     FLAGS = parser.parse_args()
     np.random.seed(1009)
     device = torch.device(("cuda:" + str(FLAGS.gpu)) if torch.cuda.is_available() else "cpu")
