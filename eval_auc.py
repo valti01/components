@@ -114,6 +114,157 @@ class CustomTransform:
         compressed_img = self.compress_image(img_tensor, target, pred)
         return compressed_img
 
+def print_distances(distance):
+    print("distance shape: ", distance.shape)
+    print("Percentage of distances greater than 1: ", np.mean(distance > 1))
+    print("Min distance: ", np.min(distance))
+    print("Max distance: ", np.max(distance))
+    print("Average distance: ", np.mean(distance))
+    print("Median distance: ", np.median(distance))
+
+
+def save_images(distance, x_test,x_test_ood,params,pred_in,pred_out,attack_distance,x_test_ood_adv,pred_a_out,x_test_adv,pred_a_in,top_10_indices):
+    max_index = np.argmax(distance)
+    max_x_test = x_test[max_index]
+    max_x_test_ood = x_test_ood[max_index]
+
+    if not os.path.exists(f'{params.imgdir}/max(x,xc)/'):
+        os.makedirs(f'{params.imgdir}/max(x,xc)')
+    fig, axes = plt.subplots(1, 2)
+    axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[0].set_axis_off()
+    axes[0].set_title(f"x {parse_label(np.argmax(pred_in[max_index]))}, {np.max(softmax(pred_in[max_index])): .2f}")
+    axes[1].imshow(max_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[1].set_axis_off()
+    axes[1].set_title(
+        f"xc {parse_label(np.argmax(pred_out[max_index]))}, {np.max(softmax(pred_out[max_index])): .2f}")
+    plt.savefig(f"{params.imgdir}/max(x,xc)/figure_max_{params.comps}_comps.png")
+    plt.close()
+
+    min_index = np.argmin(distance)
+    min_x_test = x_test[min_index]
+    min_x_test_ood = x_test_ood[min_index]
+
+    if not os.path.exists(f'{params.imgdir}/min(x,xc)/'):
+        os.makedirs(f'{params.imgdir}/min(x,xc)')
+    fig, axes = plt.subplots(1, 2)
+    axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[0].set_axis_off()
+    axes[0].set_title(f"x {parse_label(np.argmax(pred_in[min_index]))}, {np.max(softmax(pred_in[min_index])): .2f}")
+    axes[1].imshow(min_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[1].set_axis_off()
+    axes[1].set_title(
+        f"xc {parse_label(np.argmax(pred_out[min_index]))}, {np.max(softmax(pred_out[min_index])): .2f}")
+    plt.savefig(f"{params.imgdir}/min(x,xc)/figure_min_{params.comps}_comps.png")
+    plt.close()
+
+    max_index = np.argmax(attack_distance)
+    max_x_test = x_test[max_index]
+    max_x_test_ood_adv = x_test_ood_adv[max_index]
+
+    if not os.path.exists(f'{params.imgdir}/max(x,xca)/'):
+        os.makedirs(f'{params.imgdir}/max(x,xca)')
+    fig, axes = plt.subplots(1, 2)
+    axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[0].set_axis_off()
+    axes[0].set_title(f"x {parse_label(np.argmax(pred_in[max_index]))}, {np.max(softmax(pred_in[max_index])): .2f}")
+    axes[1].imshow(max_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[1].set_axis_off()
+    axes[1].set_title(
+        f"xca {parse_label(np.argmax(pred_a_out[max_index]))},{np.max(softmax(pred_a_out[max_index])): .2f}")
+    plt.savefig(f"{params.imgdir}/max(x,xca)/figure_max_{params.comps}_comps.png")
+    plt.close()
+
+    # min distance image
+
+    min_index = np.argmin(attack_distance)
+    min_x_test = x_test[min_index]
+    min_x_test_ood_adv = x_test_ood_adv[min_index]
+
+    if not os.path.exists(f'{params.imgdir}/min(x,xca)/'):
+        os.makedirs(f'{params.imgdir}/min(x,xca)')
+    fig, axes = plt.subplots(1, 2)
+    axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[0].set_axis_off()
+    axes[0].set_title(f"x {parse_label(np.argmax(pred_in[min_index]))}, {np.max(softmax(pred_in[min_index])): .2f}")
+    axes[1].imshow(min_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
+    axes[1].set_axis_off()
+    axes[1].set_title(
+        f"xca {parse_label(np.argmax(pred_a_out[min_index]))}, {np.max(softmax(pred_a_out[min_index])): .2f}")
+    plt.savefig(f"{params.imgdir}/min(x,xca)/figure_min_{params.comps}_comps.png")
+    plt.close()
+
+    if not os.path.exists(f'{params.imgdir}/{params.comps}'):
+        os.makedirs(f'{params.imgdir}/{params.comps}')
+
+    for i in range(1000):
+        diff = x_test_adv[i] - x_test[i]
+        diff = diffscale(diff)
+
+        diffood = x_test_ood_adv[i] - x_test_ood[i]
+        diffood = diffscale(diffood)
+        fig, axes = plt.subplots(2, 3)
+        axes[0, 0].imshow(x_test[i].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0, 0].set_axis_off()
+        axes[0, 0].set_title(f"x {parse_label(np.argmax(pred_in[i]))}, {np.max(softmax(pred_in[i])): .2f}")
+        axes[0, 2].imshow(x_test_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0, 2].set_axis_off()
+        axes[0, 2].set_title(f"xa {parse_label(np.argmax(pred_a_in[i]))}, {np.max(softmax(pred_a_in[i])): .2f}")
+        axes[1, 0].imshow(x_test_ood[i].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1, 0].set_axis_off()
+        axes[1, 0].set_title(f"xc {parse_label(np.argmax(pred_out[i]))}, {np.max(softmax(pred_out[i])): .2f}")
+        axes[1, 2].imshow(x_test_ood_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1, 2].set_axis_off()
+        axes[1, 2].set_title(
+            f"xca {parse_label(np.argmax(pred_a_out[i]))}, {np.max(softmax(pred_a_out[i])): .2f}")
+        axes[0, 1].imshow(diff.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0, 1].set_axis_off()
+        axes[0, 1].set_title("diff(x,xa)")
+        axes[1, 1].imshow(diffood.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1, 1].set_axis_off()
+        axes[1, 1].set_title("diff(xc,xca)")
+
+        plt.savefig(f"{params.imgdir}/{params.comps}/figure_{i}.png", bbox_inches='tight')
+        plt.close()
+
+    # top 10 x_test_ood_adv
+    if not os.path.exists(f"{params.imgdir}/{params.comps}/top10confidence"):
+        os.makedirs(f"{params.imgdir}/{params.comps}/top10confidence")
+
+    for i in range(10):
+        index = top_10_indices[i]
+        diff = x_test_adv[index] - x_test[index]
+        diff = diffscale(diff)
+
+        diffood = x_test_ood_adv[index] - x_test_ood[index]
+        diffood = diffscale(diffood)
+        fig, axes = plt.subplots(2, 3)
+        axes[0, 0].imshow(x_test[index].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0, 0].set_axis_off()
+        axes[0, 0].set_title(f"x {parse_label(np.argmax(pred_in[index]))}, {np.max(softmax(pred_in[index])): .2f}")
+        axes[0, 2].imshow(x_test_adv[index].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0, 2].set_axis_off()
+        axes[0, 2].set_title(
+            f"xa {parse_label(np.argmax(pred_a_in[index]))}, {np.max(softmax(pred_a_in[index])): .2f}")
+        axes[1, 0].imshow(x_test_ood[index].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1, 0].set_axis_off()
+        axes[1, 0].set_title(
+            f"xc {parse_label(np.argmax(pred_out[index]))}, {np.max(softmax(pred_out[index])): .2f}")
+        axes[1, 2].imshow(x_test_ood_adv[index].transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1, 2].set_axis_off()
+        axes[1, 2].set_title(
+            f"xca {parse_label(np.argmax(pred_a_out[index]))}, {np.max(softmax(pred_a_out[index])): .2f}")
+        axes[0, 1].imshow(diff.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0, 1].set_axis_off()
+        axes[0, 1].set_title("diff(x,xa)")
+        axes[1, 1].imshow(diffood.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1, 1].set_axis_off()
+        axes[1, 1].set_title("diff(xc,xca)")
+
+        plt.savefig(f"{params.imgdir}/{params.comps}/top10confidence/figure_{i}.png", bbox_inches='tight')
+        plt.close()
+
+
 
 def predict(net, loader, device):
     preds = []
@@ -385,7 +536,7 @@ def main(params, device):
         pred_softmax = np.max(softmax(pred_a_out, axis=1), axis=1)
         sorted_indices = np.argsort(-pred_softmax, axis=0)
         top_10_indices = sorted_indices[:10]
-        top_10_values = pred_a_out[top_10_indices, 1]
+        #top_10_values = pred_a_out[top_10_indices, 1]
 
         l = [x for (x, y) in testloader]
         x_test = torch.cat(l, 0)
@@ -395,165 +546,16 @@ def main(params, device):
         x_test_ood = x_test_ood.detach().numpy()
 
         distance = np.sqrt(np.sum((x_test - x_test_ood) ** 2, axis=(1, 2, 3)))
-        print("distance shape: ", distance.shape)
-        print("Percentage of distances greater than 1: ", np.mean(distance > 1))
-        print("Min distance: ", np.min(distance))
-        print("Max distance: ", np.max(distance))
-        print("Average distance: ", np.mean(distance))
-        print("Median distance: ", np.median(distance))
-
-        if params.imgdir is not None:
-            max_index = np.argmax(distance)
-            max_x_test = x_test[max_index]
-            max_x_test_ood = x_test_ood[max_index]
-
-            if not os.path.exists(f'{params.imgdir}/max(x,xc)/'):
-                os.makedirs(f'{params.imgdir}/max(x,xc)')
-            fig, axes = plt.subplots(1, 2)
-            axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[0].set_axis_off()
-            axes[0].set_title(f"x {parse_label(np.argmax(pred_in[max_index]))}, {np.max(softmax(pred_in[max_index])): .2f}")
-            axes[1].imshow(max_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[1].set_axis_off()
-            axes[1].set_title(
-                f"xc {parse_label(np.argmax(pred_out[max_index]))}, {np.max(softmax(pred_out[max_index])): .2f}")
-            plt.savefig(f"{params.imgdir}/max(x,xc)/figure_max_{params.comps}_comps.png")
-            plt.close()
-
-            min_index = np.argmin(distance)
-            min_x_test = x_test[min_index]
-            min_x_test_ood = x_test_ood[min_index]
-
-            if not os.path.exists(f'{params.imgdir}/min(x,xc)/'):
-                os.makedirs(f'{params.imgdir}/min(x,xc)')
-            fig, axes = plt.subplots(1, 2)
-            axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[0].set_axis_off()
-            axes[0].set_title(f"x {parse_label(np.argmax(pred_in[min_index]))}, {np.max(softmax(pred_in[min_index])): .2f}")
-            axes[1].imshow(min_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[1].set_axis_off()
-            axes[1].set_title(
-                f"xc {parse_label(np.argmax(pred_out[min_index]))}, {np.max(softmax(pred_out[min_index])): .2f}")
-            plt.savefig(f"{params.imgdir}/min(x,xc)/figure_min_{params.comps}_comps.png")
-            plt.close()
+        print_distances(distance)
 
         attack_distance = np.sqrt(np.sum((x_test - x_test_ood_adv) ** 2,
                                          axis=(1, 2, 3)))
 
-        print("distance shape: ", attack_distance.shape)
-        print("(after attack) Percentage of distances greater than 1: ", np.mean(attack_distance > 0.5))
-        print("(after attack) Min distance: ", np.min(attack_distance))
-        print("(after attack) Max distance: ", np.max(attack_distance))
-        print("(after attack) Average distance: ", np.mean(attack_distance))
-        print("(after attack) Median distance: ", np.median(attack_distance))
+        print_distances(attack_distance)
 
-        # max distance image
+
         if params.imgdir is not None:
-            max_index = np.argmax(attack_distance)
-            max_x_test = x_test[max_index]
-            max_x_test_ood_adv = x_test_ood_adv[max_index]
-
-            if not os.path.exists(f'{params.imgdir}/max(x,xca)/'):
-                os.makedirs(f'{params.imgdir}/max(x,xca)')
-            fig, axes = plt.subplots(1, 2)
-            axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[0].set_axis_off()
-            axes[0].set_title(f"x {parse_label(np.argmax(pred_in[max_index]))}, {np.max(softmax(pred_in[max_index])): .2f}")
-            axes[1].imshow(max_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[1].set_axis_off()
-            axes[1].set_title(
-                f"xca {parse_label(np.argmax(pred_a_out[max_index]))},{np.max(softmax(pred_a_out[max_index])): .2f}")
-            plt.savefig(f"{params.imgdir}/max(x,xca)/figure_max_{params.comps}_comps.png")
-            plt.close()
-
-            # min distance image
-
-            min_index = np.argmin(attack_distance)
-            min_x_test = x_test[min_index]
-            min_x_test_ood_adv = x_test_ood_adv[min_index]
-
-            if not os.path.exists(f'{params.imgdir}/min(x,xca)/'):
-                os.makedirs(f'{params.imgdir}/min(x,xca)')
-            fig, axes = plt.subplots(1, 2)
-            axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[0].set_axis_off()
-            axes[0].set_title(f"x {parse_label(np.argmax(pred_in[min_index]))}, {np.max(softmax(pred_in[min_index])): .2f}")
-            axes[1].imshow(min_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[1].set_axis_off()
-            axes[1].set_title(
-                f"xca {parse_label(np.argmax(pred_a_out[min_index]))}, {np.max(softmax(pred_a_out[min_index])): .2f}")
-            plt.savefig(f"{params.imgdir}/min(x,xca)/figure_min_{params.comps}_comps.png")
-            plt.close()
-
-            if not os.path.exists(f'{params.imgdir}/{params.comps}'):
-                os.makedirs(f'{params.imgdir}/{params.comps}')
-
-            for i in range(1000):
-                diff = x_test_adv[i] - x_test[i]
-                diff = diffscale(diff)
-
-                diffood = x_test_ood_adv[i] - x_test_ood[i]
-                diffood = diffscale(diffood)
-                fig, axes = plt.subplots(2, 3)
-                axes[0, 0].imshow(x_test[i].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[0, 0].set_axis_off()
-                axes[0, 0].set_title(f"x {parse_label(np.argmax(pred_in[i]))}, {np.max(softmax(pred_in[i])): .2f}")
-                axes[0, 2].imshow(x_test_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[0, 2].set_axis_off()
-                axes[0, 2].set_title(f"xa {parse_label(np.argmax(pred_a_in[i]))}, {np.max(softmax(pred_a_in[i])): .2f}")
-                axes[1, 0].imshow(x_test_ood[i].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[1, 0].set_axis_off()
-                axes[1, 0].set_title(f"xc {parse_label(np.argmax(pred_out[i]))}, {np.max(softmax(pred_out[i])): .2f}")
-                axes[1, 2].imshow(x_test_ood_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[1, 2].set_axis_off()
-                axes[1, 2].set_title(
-                    f"xca {parse_label(np.argmax(pred_a_out[i]))}, {np.max(softmax(pred_a_out[i])): .2f}")
-                axes[0, 1].imshow(diff.transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[0, 1].set_axis_off()
-                axes[0, 1].set_title("diff(x,xa)")
-                axes[1, 1].imshow(diffood.transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[1, 1].set_axis_off()
-                axes[1, 1].set_title("diff(xc,xca)")
-
-                plt.savefig(f"{params.imgdir}/{params.comps}/figure_{i}.png", bbox_inches='tight')
-                plt.close()
-
-            # top 10 x_test_ood_adv
-            if not os.path.exists(f"{params.imgdir}/{params.comps}/top10confidence"):
-                os.makedirs(f"{params.imgdir}/{params.comps}/top10confidence")
-
-            for i in range(10):
-                index = top_10_indices[i]
-                diff = x_test_adv[index] - x_test[index]
-                diff = diffscale(diff)
-
-                diffood = x_test_ood_adv[index] - x_test_ood[index]
-                diffood = diffscale(diffood)
-                fig, axes = plt.subplots(2, 3)
-                axes[0, 0].imshow(x_test[index].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[0, 0].set_axis_off()
-                axes[0, 0].set_title(f"x {parse_label(np.argmax(pred_in[index]))}, {np.max(softmax(pred_in[index])): .2f}")
-                axes[0, 2].imshow(x_test_adv[index].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[0, 2].set_axis_off()
-                axes[0, 2].set_title(
-                    f"xa {parse_label(np.argmax(pred_a_in[index]))}, {np.max(softmax(pred_a_in[index])): .2f}")
-                axes[1, 0].imshow(x_test_ood[index].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[1, 0].set_axis_off()
-                axes[1, 0].set_title(
-                    f"xc {parse_label(np.argmax(pred_out[index]))}, {np.max(softmax(pred_out[index])): .2f}")
-                axes[1, 2].imshow(x_test_ood_adv[index].transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[1, 2].set_axis_off()
-                axes[1, 2].set_title(
-                    f"xca {parse_label(np.argmax(pred_a_out[index]))}, {np.max(softmax(pred_a_out[index])): .2f}")
-                axes[0, 1].imshow(diff.transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[0, 1].set_axis_off()
-                axes[0, 1].set_title("diff(x,xa)")
-                axes[1, 1].imshow(diffood.transpose(1, 2, 0).reshape(32, 32, 3))
-                axes[1, 1].set_axis_off()
-                axes[1, 1].set_title("diff(xc,xca)")
-
-                plt.savefig(f"{params.imgdir}/{params.comps}/top10confidence/figure_{i}.png", bbox_inches='tight')
-                plt.close()
+            save_images(distance, x_test,x_test_ood,params,pred_in,pred_out,attack_distance,x_test_ood_adv,pred_a_out,x_test_adv,pred_a_in,top_10_indices)
 
         for (score_name, score_fn) in score_fns:
             score_in = score_fn(pred_in)
@@ -571,13 +573,13 @@ def main(params, device):
                           'auc': calc_auc(y_true, pred_score),
                           'w-auc': calc_auc(y_true, pred_a_score),
                           'a-auc': calc_auc(y_true, pred_aa_score),
-                          'greater_than_1:': np.mean(distance > 1),
-                          'min_distance: ': np.min(distance),
+                          'greater_than_1': np.mean(distance > 1),
+                          'min_distance': np.min(distance),
                           'max_distance': np.max(distance),
-                          'average_distance: ': np.mean(distance),
+                          'average_distance:': np.mean(distance),
                           'median_distance': np.median(distance),
-                          '(after_attack)_greater_than_0.5:': np.mean(attack_distance > 0.5),
-                          '(after_attack)_min_distance:': np.min(attack_distance),
+                          '(after_attack)_greater_than_0.5': np.mean(attack_distance > 0.5),
+                          '(after_attack)_min_distance': np.min(attack_distance),
                           '(after_attack)_max_distance': np.max(attack_distance),
                           '(after_attack)_average_distance': np.mean(attack_distance),
                           '(after_attack)_median_distance': np.median(attack_distance)
@@ -620,6 +622,7 @@ if __name__ == '__main__':
     parser.add_argument("--eps_in", type=float, default=0.5)
     parser.add_argument("--eps_out", type=float, default=0.5)
     parser.add_argument("--batch_size", type=int, default=250)
+
     FLAGS = parser.parse_args()
     np.random.seed(9)
     device = torch.device(("cuda:" + str(FLAGS.gpu)) if torch.cuda.is_available() else "cpu")
