@@ -29,6 +29,105 @@ def diffscale(diff):
     return diff
 
 
+def save_image():
+    if args.imgdir != "None":
+        max_index = np.argmax(distance_x_xc)
+        max_x_test = x_test[max_index]
+        max_x_test_ood = x_test_ood[max_index]
+
+        if not os.path.exists(f'{args.imgdir}/max(x,xc)/'):
+            os.makedirs(f'{args.imgdir}/max(x,xc)')
+        fig, axes = plt.subplots(1, 2)
+        axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0].set_axis_off()
+        axes[0].set_title(f"x_test")
+        axes[1].imshow(max_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1].set_axis_off()
+        axes[1].set_title(f"x_test_ood")
+        plt.savefig(f"{args.imgdir}/max(x,xc)/figure_max_{args.comps}_comps.png")
+        plt.close()
+
+        min_index = np.argmin(distance_x_xc)
+        min_x_test = x_test[min_index]
+        min_x_test_ood = x_test_ood[min_index]
+
+        if not os.path.exists(f'{args.imgdir}/min(x,xc)/'):
+            os.makedirs(f'{args.imgdir}/min(x,xc)')
+        fig, axes = plt.subplots(1, 2)
+        axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0].set_axis_off()
+        axes[0].set_title(f"x_test")
+        axes[1].imshow(min_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1].set_axis_off()
+        axes[1].set_title(f"x_test_ood")
+        plt.savefig(f"{args.imgdir}/min(x,xc)/figure_min_{args.comps}_comps.png")
+        plt.close()
+
+        max_index = np.argmax(distance_x_xca)
+        max_x_test = x_test[max_index]
+        max_x_test_ood_adv = x_test_ood_adv[max_index]
+        if not os.path.exists(f'{args.imgdir}/max(x,xca)/'):
+            os.makedirs(f'{args.imgdir}/max(x,xca)')
+        fig, axes = plt.subplots(1, 2)
+        axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0].set_axis_off()
+        axes[0].set_title(f"x_test")
+        axes[1].imshow(max_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1].set_axis_off()
+        axes[1].set_title(f"x_test_ood_adv")
+        plt.savefig(f"{args.imgdir}/max(x,xca)/figure_max_{args.comps}_comps.png")
+        plt.close()
+
+        # min distance image
+
+        min_index = np.argmin(distance_x_xca)
+        min_x_test = x_test[min_index]
+        min_x_test_ood_adv = x_test_ood_adv[min_index]
+
+        if not os.path.exists(f'{args.imgdir}/min(x,xca)/'):
+            os.makedirs(f'{args.imgdir}/min(x,xca)')
+        fig, axes = plt.subplots(1, 2)
+        axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[0].set_axis_off()
+        axes[0].set_title(f"x_test")
+        axes[1].imshow(min_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
+        axes[1].set_axis_off()
+        axes[1].set_title(f"x_test_ood_adv")
+        plt.savefig(f"{args.imgdir}/min(x,xca)/figure_min_{args.comps}_comps.png")
+        plt.close()
+
+        if not os.path.exists(f'{args.imgdir}/{args.comps}'):
+            os.makedirs(f'{args.imgdir}/{args.comps}')
+
+        for i in range(100):
+            diff = x_test_adv[i] - x_test[i]
+            diff = diffscale(diff)
+
+            diffood = x_test_ood_adv[i] - x_test_ood[i]
+            diffood = diffscale(diffood)
+            fig, axes = plt.subplots(2, 3)
+            axes[0, 0].imshow(x_test[i].transpose(1, 2, 0).reshape(32, 32, 3))
+            axes[0, 0].set_axis_off()
+            axes[0, 0].set_title(f"x_test")
+            axes[0, 2].imshow(x_test_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
+            axes[0, 2].set_axis_off()
+            axes[0, 2].set_title(f"x_test_adv")
+            axes[1, 0].imshow(x_test_ood[i].transpose(1, 2, 0).reshape(32, 32, 3))
+            axes[1, 0].set_axis_off()
+            axes[1, 0].set_title(f"x_test_ood")
+            axes[1, 2].imshow(x_test_ood_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
+            axes[1, 2].set_axis_off()
+            axes[1, 2].set_title(f"x_test_ood_adv")
+            axes[0, 1].imshow(diff.transpose(1, 2, 0).reshape(32, 32, 3))
+            axes[0, 1].set_axis_off()
+            axes[0, 1].set_title("diff(x,xa)")
+            axes[1, 1].imshow(diffood.transpose(1, 2, 0).reshape(32, 32, 3))
+            axes[1, 1].set_axis_off()
+            axes[1, 1].set_title("diff(xc,xca)")
+
+            plt.savefig(f"{args.imgdir}/{args.comps}/figure_{i}.png", bbox_inches='tight')
+            plt.close()
+
 # get args
 def get_args():
     parser = argparse.ArgumentParser()
@@ -208,105 +307,7 @@ if __name__ == '__main__':
 
     # save images
 
-    if args.imgdir != "None":
-        max_index = np.argmax(distance_x_xc)
-        max_x_test = x_test[max_index]
-        max_x_test_ood = x_test_ood[max_index]
 
-        if not os.path.exists(f'{args.imgdir}/max(x,xc)/'):
-            os.makedirs(f'{args.imgdir}/max(x,xc)')
-        fig, axes = plt.subplots(1, 2)
-        axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[0].set_axis_off()
-        axes[0].set_title(f"x_test")
-        axes[1].imshow(max_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[1].set_axis_off()
-        axes[1].set_title(f"x_test_ood")
-        plt.savefig(f"{args.imgdir}/max(x,xc)/figure_max_{args.comps}_comps.png")
-        plt.close()
-
-        min_index = np.argmin(distance_x_xc)
-        min_x_test = x_test[min_index]
-        min_x_test_ood = x_test_ood[min_index]
-
-        if not os.path.exists(f'{args.imgdir}/min(x,xc)/'):
-            os.makedirs(f'{args.imgdir}/min(x,xc)')
-        fig, axes = plt.subplots(1, 2)
-        axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[0].set_axis_off()
-        axes[0].set_title(f"x_test")
-        axes[1].imshow(min_x_test_ood.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[1].set_axis_off()
-        axes[1].set_title(f"x_test_ood")
-        plt.savefig(f"{args.imgdir}/min(x,xc)/figure_min_{args.comps}_comps.png")
-        plt.close()
-
-    # max distance image
-    if args.imgdir != "None":
-        max_index = np.argmax(distance_x_xca)
-        max_x_test = x_test[max_index]
-        max_x_test_ood_adv = x_test_ood_adv[max_index]
-        if not os.path.exists(f'{args.imgdir}/max(x,xca)/'):
-            os.makedirs(f'{args.imgdir}/max(x,xca)')
-        fig, axes = plt.subplots(1, 2)
-        axes[0].imshow(max_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[0].set_axis_off()
-        axes[0].set_title(f"x_test")
-        axes[1].imshow(max_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[1].set_axis_off()
-        axes[1].set_title(f"x_test_ood_adv")
-        plt.savefig(f"{args.imgdir}/max(x,xca)/figure_max_{args.comps}_comps.png")
-        plt.close()
-
-        # min distance image
-
-        min_index = np.argmin(distance_x_xca)
-        min_x_test = x_test[min_index]
-        min_x_test_ood_adv = x_test_ood_adv[min_index]
-
-        if not os.path.exists(f'{args.imgdir}/min(x,xca)/'):
-            os.makedirs(f'{args.imgdir}/min(x,xca)')
-        fig, axes = plt.subplots(1, 2)
-        axes[0].imshow(min_x_test.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[0].set_axis_off()
-        axes[0].set_title(f"x_test")
-        axes[1].imshow(min_x_test_ood_adv.transpose(1, 2, 0).reshape(32, 32, 3))
-        axes[1].set_axis_off()
-        axes[1].set_title(f"x_test_ood_adv")
-        plt.savefig(f"{args.imgdir}/min(x,xca)/figure_min_{args.comps}_comps.png")
-        plt.close()
-
-        if not os.path.exists(f'{args.imgdir}/{args.comps}'):
-            os.makedirs(f'{args.imgdir}/{args.comps}')
-
-        for i in range(100):
-            diff = x_test_adv[i] - x_test[i]
-            diff = diffscale(diff)
-
-            diffood = x_test_ood_adv[i] - x_test_ood[i]
-            diffood = diffscale(diffood)
-            fig, axes = plt.subplots(2, 3)
-            axes[0, 0].imshow(x_test[i].transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[0, 0].set_axis_off()
-            axes[0, 0].set_title(f"x_test")
-            axes[0, 2].imshow(x_test_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[0, 2].set_axis_off()
-            axes[0, 2].set_title(f"x_test_adv")
-            axes[1, 0].imshow(x_test_ood[i].transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[1, 0].set_axis_off()
-            axes[1, 0].set_title(f"x_test_ood")
-            axes[1, 2].imshow(x_test_ood_adv[i].transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[1, 2].set_axis_off()
-            axes[1, 2].set_title(f"x_test_ood_adv")
-            axes[0, 1].imshow(diff.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[0, 1].set_axis_off()
-            axes[0, 1].set_title("diff(x,xa)")
-            axes[1, 1].imshow(diffood.transpose(1, 2, 0).reshape(32, 32, 3))
-            axes[1, 1].set_axis_off()
-            axes[1, 1].set_title("diff(xc,xca)")
-
-            plt.savefig(f"{args.imgdir}/{args.comps}/figure_{i}.png", bbox_inches='tight')
-            plt.close()
 
     # auc
     for i, score_out_dataset in enumerate(scores_out):
