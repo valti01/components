@@ -81,18 +81,21 @@ class CompressImage:
         right = 3072
         best_componentnumber = 3072
         #if cant be done with 1 comp, return 1 comp
-        while left<right:
-            mid = (left+right)//2
-            picr = np.dot(pre[:mid], self.V[label][:mid, :])
-            distance = np.sqrt(np.sum((pic - picr) ** 2))
-            if distance>self.mindistance:
-                left = mid+1
-            else:
-                right = mid-1
-        #TODO: log the problematic images
-        best_componentnumber = left
-        picr = np.dot(pre[:best_componentnumber], self.V[label][:best_componentnumber, :])
-        distance = np.sqrt(np.sum((pic - picr) ** 2))
+        if self.mindistance is not None:
+            while left<right:
+                mid = (left+right)//2
+                picr = np.dot(pre[:mid], self.V[label][:mid, :])
+                distance = np.sqrt(np.sum((pic - picr) ** 2))
+                if distance>self.mindistance:
+                    left = mid+1
+                else:
+                    right = mid-1
+            #TODO: log the problematic images
+            best_componentnumber = left
+            picr = np.dot(pre[:best_componentnumber], self.V[label][:best_componentnumber, :])
+        else:
+            picr = np.dot(pre[:self.n_comps], self.V[label][:self.n_comps, :])
+        #distance = np.sqrt(np.sum((pic - picr) ** 2))
 
 
         # while componentnumber < 3072 or distance <= 1:
@@ -400,14 +403,14 @@ def predict_adv(net, loader, device, attack, eps, is_ood, n_restart):
 
 
 def split_data(dataset, size=1000, seed=100):
-    size=10000
+    size=1000
     n = len(dataset)
     rnd_state = np.random.RandomState(seed=seed)
     indices = np.arange(0, n)
     rnd_state.shuffle(indices)
     indices = indices[:size]
     subset = Subset(dataset, indices=indices)
-
+    print(len(subset))
     return subset
 
 
@@ -683,7 +686,7 @@ if __name__ == '__main__':
     parser.add_argument("--eps_in", type=float, default=0.5)
     parser.add_argument("--eps_out", type=float, default=0.5)
     parser.add_argument("--batch_size", type=int, default=200)
-    parser.add_argument("--adaptive_min_distance", type=float, default=1)
+    parser.add_argument("--adaptive_min_distance", type=float)
     start_time = time.time()
     FLAGS = parser.parse_args()
     np.random.seed(9)
