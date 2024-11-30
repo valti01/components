@@ -57,7 +57,6 @@ class FaceLandmarksDataset(torchvision.datasets.CIFAR10):
 class CompressImage:
 
     def __call__(self, pic: torch.Tensor, target: int, pred):
-
         if self.targetlabel == "random":
             random_gen = random.Random(self.randomseed)
             numbers = [i for i in range(10) if i != target]
@@ -85,14 +84,33 @@ class CompressImage:
             while left<right:
                 mid = (left+right)//2
                 picr = np.dot(pre[:mid], self.V[label][:mid, :])
-                distance = np.sqrt(np.sum((pic - picr) ** 2))
+                if self.distancenorm == "L2":
+                    distance = np.sqrt(np.sum((pic - picr) ** 2))
+                elif self.distancenorm == "Linf":
+                    distance = np.max(np.abs(pic - picr))
                 if distance>self.mindistance:
                     left = mid+1
                 else:
                     right = mid-1
             #TODO: log the problematic images
-            best_componentnumber = left
+            best_componentnumber = left-1
             picr = np.dot(pre[:best_componentnumber], self.V[label][:best_componentnumber, :])
+            distance = np.sqrt(np.sum((pic - picr) ** 2))
+            if distance<self.mindistance:
+                left = 1
+                right = 3072
+                while left < right:
+                    mid = (left + right) // 2
+                    picr = np.dot(pre[:mid], self.V[label][:mid, :])
+                    if self.distancenorm == "L2":
+                        distance = np.sqrt(np.sum((pic - picr) ** 2))
+                    elif self.distancenorm == "Linf":
+                        distance = np.max(np.abs(pic - picr))
+                    if distance > self.mindistance:
+                        left = mid + 1
+                    else:
+                        right = mid - 1
+
         else:
             picr = np.dot(pre[:self.n_comps], self.V[label][:self.n_comps, :])
         #distance = np.sqrt(np.sum((pic - picr) ** 2))
@@ -110,7 +128,7 @@ class CompressImage:
         pic_tensor = torch.from_numpy(picr.transpose((2, 0, 1))).float()
         return pic_tensor
 
-    def __init__(self, n_comps, targetlabel, randomseed, mindistance):
+    def __init__(self, n_comps, targetlabel, randomseed, mindistance, distancenorm):
         random.seed(5)
         train_set = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transforms.ToTensor())
         test_set = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transforms.ToTensor())
@@ -119,7 +137,6 @@ class CompressImage:
         x_test = test_set.data
         y_test = test_set.targets
         x_train = x_train.reshape((x_train.shape[0], -1)).astype(np.float32) / 255
-        print(x_train.shape) #(50000,3072)
         y_train = np.array(y_train)
         V = []
         if targetlabel == "all":
@@ -137,21 +154,21 @@ class CompressImage:
         self.n_comps = n_comps
         self.randomseed = randomseed
         self.mindistance = mindistance
+        self.distancenorm = distancenorm
         current_time = time.time()
         runtime = current_time - start_time
         hours, remainder = divmod(runtime,3600)
         minute, seconds = divmod(remainder, 60)
         print(f"runtime: {hours} hours {minute} minutes {seconds} seconds")
-        print()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
 
 class CustomTransform:
-    def __init__(self, n_comps, label, randomseed, mindistance):
+    def __init__(self, n_comps, label, randomseed, mindistance, distancenorm):
         self.to_tensor = transforms.ToTensor()
-        self.compress_image = CompressImage(n_comps, label, randomseed, mindistance)
+        self.compress_image = CompressImage(n_comps, label, randomseed, mindistance, distancenorm)
 
     def __call__(self, img, target, pred):
         img_tensor = self.to_tensor(img)
@@ -321,7 +338,6 @@ def predict(net, loader, device):
             outputs = net(images)
             preds.append(outputs.cpu().numpy())
 
-    print("")
     return np.concatenate(preds, axis=0)
 
 
@@ -383,7 +399,6 @@ def predict_adv(net, loader, device, attack, eps, is_ood, n_restart):
                 score_best = score_j
                 adv_best = advs_j
                 pred_best = pred_j
-                print(advs_j.shape)
                 # dv_return[i]=advs_j
             else:
                 is_improved = score_j > score_best
@@ -398,7 +413,6 @@ def predict_adv(net, loader, device, attack, eps, is_ood, n_restart):
         adv_images.append(adv_best)
         preds.append(pred_best)
 
-    print("advimages", np.concatenate(adv_images, axis=0).shape)
     return np.concatenate(preds, axis=0), np.concatenate(adv_images, axis=0)
 
 
@@ -410,11 +424,10 @@ def split_data(dataset, size=1000, seed=100):
     rnd_state.shuffle(indices)
     indices = indices[:size]
     subset = Subset(dataset, indices=indices)
-    print(len(subset))
     return subset
 
 
-def get_ood_datasets(targetlabel, comps, randomseed, batch_size, srcds, ood_names, pred_in, mindistance, size=1000):
+def get_ood_datasets(targetlabel, comps, randomseed, batch_size, srcds, ood_names, pred_in, mindistance,distancenorm  ,size=1000):
     ood_ds = []
     if ood_names is None or np.isin('svhn', ood_names):
         testsetsvhn = torchvision.datasets.SVHN(root='./data', split='test', download=True,
@@ -434,7 +447,7 @@ def get_ood_datasets(targetlabel, comps, randomseed, batch_size, srcds, ood_name
         print('Add: ', ood_ds[-1][0])
     if ood_names is None or np.isin('cifar10-compressed', ood_names):
         testsetc10 = FaceLandmarksDataset(root='./data', train=False, preds=pred_in, download=True,
-                                          transform=CustomTransform(comps, targetlabel, randomseed, mindistance))
+                                          transform=CustomTransform(comps, targetlabel, randomseed, mindistance,distancenorm))
         testsetc10 = split_data(testsetc10, size=size)
 
         testloaderc10 = torch.utils.data.DataLoader(testsetc10, batch_size=batch_size, shuffle=False, num_workers=2)
@@ -541,6 +554,10 @@ def main(params, device):
     testloader = torch.utils.data.DataLoader(testset, batch_size=params.batch_size,
                                              shuffle=False, num_workers=1)
 
+
+
+
+
     model = ResNet50(10)
     print("Load model")
     model.load_state_dict(torch.load(params.fname))
@@ -560,6 +577,40 @@ def main(params, device):
     pred_in = predict(model, testloader, device)
     full_pred_in = predict(model, fulltestloader, device)
 
+    #
+    l = [x for (x, y) in testloader]
+    x_test = torch.cat(l, 0)
+    x_test = x_test.detach().numpy()
+
+    componentnumber = params.comps
+
+    if params.global_min_distance is not None:
+
+        transform = CustomTransform(componentnumber, params.targetlabel, randomseed=params.randomseed, mindistance=None, distancenorm=params.distance_norm)
+        compressed = FaceLandmarksDataset(root='./data', train=False, preds=full_pred_in, download=True,
+                                          transform=transform)
+        compressed = split_data(compressed, size=1000)
+
+        while componentnumber > 1:
+            l = [x for (x, y) in compressed]
+            x_test_ood = torch.cat(l, 0)
+            x_test_ood = x_test_ood.detach().numpy()
+            x_test_ood = x_test_ood.reshape(1000,3,32,32)
+            if params.distance_norm == "Linf":
+                distance = np.max(np.abs(x_test - x_test_ood), axis=(1,2,3)) #linf
+            if params.distance_norm == "L2":
+                distance = np.sqrt(np.sum((x_test - x_test_ood) ** 2, axis=(1, 2, 3))) #l2
+
+            if np.min(distance) <= params.global_min_distance:
+                print(f"current number:{componentnumber} current minimum distance: {np.min(distance)}")
+                break
+
+            print(f"current number:{componentnumber} current minimum distance: {np.min(distance)}", end="\r")
+            componentnumber += 1
+            transform.compress_image.n_comps = componentnumber
+
+    #
+
     if params.pred_fname is not None:
         newmodel = ResNet50(10)
         newmodel.load_state_dict(torch.load(params.pred_fname))
@@ -567,8 +618,8 @@ def main(params, device):
         newmodel.to(device)
         full_pred_in = predict(newmodel, fulltestloader, device)
 
-    ood_datasets = get_ood_datasets(params.targetlabel, params.comps, params.randomseed, params.batch_size, testset,
-                                    params.ood_filter,mindistance=params.adaptive_min_distance, pred_in=full_pred_in)
+    ood_datasets = get_ood_datasets(params.targetlabel, componentnumber, params.randomseed, params.batch_size, testset,
+                                    params.ood_filter,mindistance=params.adaptive_min_distance, pred_in=full_pred_in,distancenorm=params.distance_norm)
     print("Attack in distribution...")
     pred_a_in, x_test_adv = predict_adv(model, testloader, device, attack_in, params.eps_in, False, params.n_restarts)
     score_fns = [('msp', msp), ('ml', ml), ('lse', lse), ('ul', ul)]
@@ -593,14 +644,13 @@ def main(params, device):
 
 
 
-        print(pred_a_out.shape)
-        print(pred_a_out[0])
-        print(labels.shape)
-        print(labels[0])
         predicted_labels = np.argmax(pred_a_out, axis=1)
 
+        if params.distance_norm == "Linf":
+            distance = np.max(np.abs(x_test - x_test_ood), axis=(1, 2, 3))  # linf
+        if params.distance_norm == "L2":
+            distance = np.sqrt(np.sum((x_test - x_test_ood) ** 2, axis=(1, 2, 3)))
 
-        distance = np.sqrt(np.sum((x_test - x_test_ood) ** 2, axis=(1, 2, 3)))
         print_distances(distance)
 
         attack_distance = np.sqrt(np.sum((x_test - x_test_ood_adv) ** 2,
@@ -624,7 +674,7 @@ def main(params, device):
             pred_a_score = np.concatenate((score_in, score_a_out), axis=0)
             pred_aa_score = np.concatenate((score_a_in, score_a_out), axis=0)
             stats.append({'model_fname': params.fname,
-                          'components': 'adaptive',
+                          'components': 'adaptive' if params.adaptive_min_distance is not None else componentnumber,
                           'score_fn': score_name,
                           'ds': name,
                           'auc': calc_auc(y_true, pred_score),
@@ -641,7 +691,9 @@ def main(params, device):
                           '(after_attack)_average_distance': np.mean(attack_distance),
                           '(after_attack)_median_distance': np.median(attack_distance),
                           'adaptive_min_distance': params.adaptive_min_distance,
-                          'accuracy': accuracy
+                          'accuracy': accuracy,
+                          'global_min_distance': params.global_min_distance,
+                          'distance_norm': params.distance_norm
                           })
             print(stats[-1])
         end_time = time.time()
@@ -652,13 +704,11 @@ def main(params, device):
 
     if params.out_fname is not None:
         is_exist = os.path.exists(params.out_fname)
-        with open(params.out_fname, mode='a+') as out_f:
-            args = vars(params)
-            writer = csv.DictWriter(out_f, dialect='excel', fieldnames=sorted({*stats[0].keys()}.union(args.keys())))
+        with open(params.out_fname, mode='a+') as out_csv:
+            writer = csv.DictWriter(out_csv, fieldnames=stats[0].keys())
             if not is_exist:
                 writer.writeheader()
-            for i in range(len(stats)):
-                writer.writerow({**args, **stats[i]})
+            writer.writerows(stats)
 
 
 def diffscale(diff):
@@ -677,7 +727,7 @@ if __name__ == '__main__':
     parser.add_argument("--out_fname", type=str)
     parser.add_argument("--obj", type=str, default="ul")
     parser.add_argument("--steps", type=int, default=20)
-    parser.add_argument("--comps", type=int, default=150)
+    parser.add_argument("--comps", type=int, default=350)
     parser.add_argument("--targetlabel", type=str, default="1")
     parser.add_argument("--n_restarts", type=int, default=10)
     parser.add_argument("--randomseed", type=int, default=10)
@@ -687,6 +737,8 @@ if __name__ == '__main__':
     parser.add_argument("--eps_out", type=float, default=0.5)
     parser.add_argument("--batch_size", type=int, default=200)
     parser.add_argument("--adaptive_min_distance", type=float)
+    parser.add_argument("--global_min_distance",type=float)
+    parser.add_argument("--distance_norm", type=str, default="L2")
     start_time = time.time()
     FLAGS = parser.parse_args()
     np.random.seed(9)
