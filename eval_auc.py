@@ -92,24 +92,8 @@ class CompressImage:
                     left = mid+1
                 else:
                     right = mid-1
-            #TODO: log the problematic images
             best_componentnumber = left-1
             picr = np.dot(pre[:best_componentnumber], self.V[label][:best_componentnumber, :])
-            distance = np.sqrt(np.sum((pic - picr) ** 2))
-            if distance<self.mindistance:
-                left = 1
-                right = 3072
-                while left < right:
-                    mid = (left + right) // 2
-                    picr = np.dot(pre[:mid], self.V[label][:mid, :])
-                    if self.distancenorm == "L2":
-                        distance = np.sqrt(np.sum((pic - picr) ** 2))
-                    elif self.distancenorm == "Linf":
-                        distance = np.max(np.abs(pic - picr))
-                    if distance > self.mindistance:
-                        left = mid + 1
-                    else:
-                        right = mid - 1
 
         else:
             picr = np.dot(pre[:self.n_comps], self.V[label][:self.n_comps, :])
@@ -450,7 +434,7 @@ def get_ood_datasets(targetlabel, comps, randomseed, batch_size, srcds, ood_name
                                           transform=CustomTransform(comps, targetlabel, randomseed, mindistance,distancenorm))
         testsetc10 = split_data(testsetc10, size=size)
 
-        testloaderc10 = torch.utils.data.DataLoader(testsetc10, batch_size=batch_size, shuffle=False, num_workers=2)
+        testloaderc10 = torch.utils.data.DataLoader(testsetc10, batch_size=batch_size, shuffle=False, num_workers=1)
 
         ood_ds.append(('cifar10-compressed', testloaderc10))
         print('Add: ', ood_ds[-1][0])
@@ -693,7 +677,8 @@ def main(params, device):
                           'adaptive_min_distance': params.adaptive_min_distance,
                           'accuracy': accuracy,
                           'global_min_distance': params.global_min_distance,
-                          'distance_norm': params.distance_norm
+                          'distance_norm': params.distance_norm,
+                          'targetlabel': params.targetlabel
                           })
             print(stats[-1])
         end_time = time.time()
