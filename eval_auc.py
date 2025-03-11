@@ -80,33 +80,27 @@ class CompressImage:
         right = 3072
         best_componentnumber = 3072
         #if cant be done with 1 comp, return 1 comp
-        if self.mindistance is not None:
-            while left<right:
-                mid = (left+right)//2
-                picr = np.dot(pre[:mid], self.V[label][:mid, :])
-                if self.distancenorm == "L2":
-                    distance = np.sqrt(np.sum((pic - picr) ** 2))
-                elif self.distancenorm == "Linf":
-                    distance = np.max(np.abs(pic - picr))
-                if distance>self.mindistance:
-                    left = mid+1
-                else:
-                    right = mid-1
-            best_componentnumber = left-1
-            picr = np.dot(pre[:best_componentnumber], self.V[label][:best_componentnumber, :])
 
+        if self.mindistance is not None:
+
+            while left <= right:
+                mid = (left + right) // 2
+                imgr = np.dot(np.dot(pic, self.V[label][:mid, :].T), self.V[label][:mid, :])
+                distance = np.sqrt(np.sum((pic - imgr) ** 2))
+
+                if distance <= self.mindistance:
+                    best_componentnumber = mid
+                    best_distance = distance
+                    right = mid - 1
+                else:
+                    left = mid + 1
+            best_componentnumber -= 1
+            best_componentnumber = max(best_componentnumber,1)
+            picr = np.dot(np.dot(pic, self.V[label][:best_componentnumber, :].T),
+                          self.V[label][:best_componentnumber, :])
         else:
             picr = np.dot(pre[:self.n_comps], self.V[label][:self.n_comps, :])
         #distance = np.sqrt(np.sum((pic - picr) ** 2))
-
-
-        # while componentnumber < 3072 or distance <= 1:
-        #     picr = np.dot(np.dot(pic, self.V[label][:componentnumber, :].T), self.V[label][:componentnumber, :])
-        #     distance = np.sqrt(np.sum((pic - picr) ** 2))
-        #     componentnumber=componentnumber+1 #todo: binary search
-        #
-        # picr = np.dot(np.dot(pic, self.V[label][:componentnumber - 1, :].T), self.V[label][:componentnumber - 1, :])
-
 
         picr = picr.reshape((32, 32, 3))
         pic_tensor = torch.from_numpy(picr.transpose((2, 0, 1))).float()
