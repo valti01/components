@@ -1,0 +1,30 @@
+dataset: mnist
+
+just in attacked
+eps= 0.0 : 0.9877722999999999
+eps= 0.0313 : 0.93785685
+
+just out attacked
+eps= 0.0 : 0.9877722999999999
+eps= 0.0313 : 0.9774843150000001
+
+both attacked
+eps= 0.0 : 0.9877722999999999
+eps= 0.0313 : 0.9018455599999999
+
+
+
+dataset: cifar10-compressed
+
+just in attacked
+eps= 0.0 : 0.672348605
+eps= 0.0313 : 0.398571785
+
+just out attacked
+eps= 0.0 : 0.672348605
+eps= 0.0313 : 0.40914835499999996
+
+both attacked
+eps= 0.0 : 0.672348605
+eps= 0.0313 : 0.19458635500000002
+
