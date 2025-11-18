@@ -14,7 +14,7 @@ import torchvision
 import torchvision.transforms as transforms
 from model_normalization import Cifar10Wrapper
 from torch.utils.data import Subset
-from foolbox.attacks import L2PGD
+from foolbox.attacks import L2PGD, LinfPGD
 from foolbox import PyTorchModel, Model
 import csv
 import os
@@ -521,6 +521,37 @@ class L2SCOREPGD(L2PGD):
 
         return loss_fn
 
+class LinfSCOREPGD(LinfPGD):
+
+    def __init__(self, *, rel_stepsize: float = 0.025, abs_stepsize: Optional[float] = None, steps: int = 50,
+                 random_start: bool = True, loss='msp'):
+        self.loss = loss
+        super().__init__(rel_stepsize=rel_stepsize, abs_stepsize=abs_stepsize, steps=steps, random_start=random_start)
+
+    def score(self, logits, labels):
+        logits_tensor = ep.astensor(logits)
+        if self.loss == 'msp':
+            return -ep.max(ep.softmax(logits_tensor, axis=1), axis=1) * labels
+        elif self.loss == 'ml':
+            return -ep.max(logits_tensor, axis=1) * labels
+        elif self.loss == 'ul':
+            lse_score = ep.log(ep.sum(ep.exp(logits_tensor), axis=1))
+            mean_logit = ep.mean(logits_tensor, axis=1)
+            return (mean_logit - lse_score) * labels
+        elif self.loss == 'lse':
+            lse_score = ep.log(ep.sum(ep.exp(logits_tensor), axis=1))
+            return -(lse_score * labels)
+        else:
+            raise Exception('Loss:{0} not supported'.format(self.loss))
+
+    def get_loss_fn(self, model: Model, labels: ep.Tensor) -> Callable[[ep.Tensor], ep.Tensor]:
+        _self = self
+
+        def loss_fn(inputs: ep.Tensor) -> ep.Tensor:
+            logits = model(inputs)
+            return ep.sum(_self.score(logits, labels))
+
+        return loss_fn
 
 def old_algorithm(global_min_distance, componentnumber, targetlabel, randomseed, distance_norm, full_pred_in, original_images):
     transform = TensorAndCompression(componentnumber, targetlabel, randomseed=randomseed,
@@ -528,8 +559,10 @@ def old_algorithm(global_min_distance, componentnumber, targetlabel, randomseed,
     compressed = CompressedDataset(root='./data', train=False, preds=full_pred_in, download=True,
                                    transform=transform)
     compressed = split_data(compressed, size=1000)
-
-    while componentnumber > 1:
+    
+    
+    componentnumber = 1
+    while componentnumber < 3072:
         l = [x for (x, y) in compressed]
         x_test_ood = torch.cat(l, 0)
         x_test_ood = x_test_ood.detach().numpy()
@@ -606,20 +639,29 @@ def main(params, device):
         model = Cifar10Wrapper(model)
         model.to(device)
 
+    if params.distance_norm == "Linf":
+        attack_in = LinfSCOREPGD(steps=params.steps,
+                               abs_stepsize=2.5 * params.eps_in / params.steps,
+                               random_start=True, loss=params.obj)
 
+        params.abs_stepsize_in = 2.5 * params.eps_in / params.steps
+        attack_out = LinfSCOREPGD(steps=params.steps,
+                                abs_stepsize=2.5 * params.eps_out / params.steps,
+                                random_start=True, loss=params.obj)
+        params.abs_stepsize_out = 2.5 * params.eps_out / params.steps
+    elif params.distance_norm == "L2":
+        attack_in = L2SCOREPGD(steps=params.steps,
+                               abs_stepsize=2.5 * params.eps_in / params.steps,
+                               random_start=True, loss=params.obj)
 
-
-    
+        params.abs_stepsize_in = 2.5 * params.eps_in / params.steps
+        attack_out = L2SCOREPGD(steps=params.steps,
+                                abs_stepsize=2.5 * params.eps_out / params.steps,
+                                random_start=True, loss=params.obj)
+        params.abs_stepsize_out = 2.5 * params.eps_out / params.steps
 
     # attack = L2PGD(steps=params.steps, abs_stepsize=params.abs_stepsize, random_start=True)
-    attack_in = L2SCOREPGD(steps=params.steps,
-                           abs_stepsize=2.5 * params.eps_in / params.steps,
-                           random_start=True, loss=params.obj)
-    params.abs_stepsize_in = 2.5 * params.eps_in / params.steps
-    attack_out = L2SCOREPGD(steps=params.steps,
-                            abs_stepsize=2.5 * params.eps_out / params.steps,
-                            random_start=True, loss=params.obj)
-    params.abs_stepsize_out = 2.5 * params.eps_out / params.steps
+
 
     labels = get_label_vector(loader=testloader)
     pred_in = predict(model, testloader, device)
@@ -631,15 +673,38 @@ def main(params, device):
     x_test = x_test.detach().numpy()
 
     componentnumber = params.comps
-
+    final_componentnumber=0
     if params.global_min_distance is not None:
 
         transform = TensorAndCompression(componentnumber, params.targetlabel, randomseed=params.randomseed, mindistance=None, distancenorm=params.distance_norm)
         compressed = CompressedDataset(root='./data', train=False, preds=full_pred_in, download=True,
                                        transform=transform)
         compressed = split_data(compressed, size=1000)
+        componentnumber = 1
+        for compnumber in [1] + list(range(10, 150, 10)):
+            transform.compress_image.n_comps = compnumber
+            l = [x for (x, y) in compressed]
+            x_test_ood = torch.cat(l, 0)
+            x_test_ood = x_test_ood.detach().numpy()
+            x_test_ood = x_test_ood.reshape(1000, 3, 32, 32)
 
-        while componentnumber > 1:
+            if params.distance_norm == "Linf":
+                distance = np.max(np.abs(x_test - x_test_ood), axis=(1, 2, 3))  # linf
+            if params.distance_norm == "L2":
+                distance = np.sqrt(np.sum((x_test - x_test_ood) ** 2, axis=(1, 2, 3)))  # l2
+
+            if np.min(distance) <= params.global_min_distance:
+                break
+
+            componentnumber = compnumber
+
+
+
+
+        transform.compress_image.n_comps = componentnumber
+
+        while componentnumber < 3072:
+            print(f"compnumber in full search: {componentnumber}")
             l = [x for (x, y) in compressed]
             x_test_ood = torch.cat(l, 0)
             x_test_ood = x_test_ood.detach().numpy()
@@ -650,12 +715,17 @@ def main(params, device):
                 distance = np.sqrt(np.sum((x_test - x_test_ood) ** 2, axis=(1, 2, 3))) #l2
 
             if np.min(distance) <= params.global_min_distance:
-                print(f"current number:{componentnumber} current minimum distance: {np.min(distance)}")
+                if componentnumber==1:
+                    final_componentnumber=1
                 break
 
-            print(f"current number:{componentnumber} current minimum distance: {np.min(distance)}", end="\r")
+            print(f"current number:{componentnumber} current minimum distance: {np.min(distance)}")
+            final_componentnumber = componentnumber
             componentnumber += 1
             transform.compress_image.n_comps = componentnumber
+
+        print(f"final: {final_componentnumber}")
+        transform.compress_image.n_comps = final_componentnumber
 
     #
 
@@ -666,7 +736,7 @@ def main(params, device):
         newmodel.to(device)
         full_pred_in = predict(newmodel, fulltestloader, device)
 
-    ood_datasets = get_ood_datasets(params.targetlabel, componentnumber, params.randomseed, params.batch_size, testset,
+    ood_datasets = get_ood_datasets(params.targetlabel, final_componentnumber, params.randomseed, params.batch_size, testset,
                                     params.ood_filter,mindistance=params.adaptive_min_distance, pred_in=full_pred_in,distancenorm=params.distance_norm)
     print("Attack in distribution...")
     pred_a_in, x_test_adv = predict_adv(model, testloader, device, attack_in, params.eps_in, False, params.n_restarts)
@@ -722,7 +792,7 @@ def main(params, device):
             pred_a_score = np.concatenate((score_in, score_a_out), axis=0)
             pred_aa_score = np.concatenate((score_a_in, score_a_out), axis=0)
             stats.append({'model_fname': params.fname,
-                          'components': 'adaptive' if params.adaptive_min_distance is not None else componentnumber,
+                          'components': 'adaptive' if params.adaptive_min_distance is not None else final_componentnumber,
                           'score_fn': score_name,
                           'ds': name,
                           'auc': calc_auc(y_true, pred_score),
@@ -769,6 +839,7 @@ def diffscale(diff):
 
 
 if __name__ == '__main__':
+    print("A")
     parser = ArgumentParser(description='Main entry point')
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--fname", type=str, default="ratio_025.pth")
@@ -777,14 +848,14 @@ if __name__ == '__main__':
     parser.add_argument("--out_fname", type=str)
     parser.add_argument("--obj", type=str, default="ul")
     parser.add_argument("--steps", type=int, default=20)
-    parser.add_argument("--comps", type=int, default=350)
+    parser.add_argument("--comps", type=int, default=1)
     parser.add_argument("--targetlabel", type=str, default="1")
     parser.add_argument("--n_restarts", type=int, default=10)
     parser.add_argument("--randomseed", type=int, default=10)
     parser.add_argument("--imgdir", type=str)
     # parser.add_argument("--abs_stepsize", type=float, default=0.1)
-    parser.add_argument("--eps_in", type=float, default=0.5)
-    parser.add_argument("--eps_out", type=float, default=0.5)
+    parser.add_argument("--eps_in", type=float, default=8/255) #TODO: 8/255
+    parser.add_argument("--eps_out", type=float, default=8/255) #TODO: 8/255
     parser.add_argument("--batch_size", type=int, default=200)
     parser.add_argument("--adaptive_min_distance", type=float)
     parser.add_argument("--global_min_distance",type=float)

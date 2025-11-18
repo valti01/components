@@ -69,18 +69,18 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_type', default='fea', type=str, choices={'fea', 'pix'})
     parser.add_argument('--targetlabel', default='all', type=str)
-    parser.add_argument('--imgdir', default='test', type=str)
+    parser.add_argument('--imgdir', type=str)
     parser.add_argument('--comps', default='1', type=int)
     parser.add_argument('--training_type', default='adv', type=str, choices={'clean', 'adv'})
     parser.add_argument('--in_dataset', default='cifar10', type=str, choices={'cifar10', 'cifar100', 'TI'})
     parser.add_argument("--out_datasets", nargs='+',
-                        default=['mnist', 'tiny_imagenet', 'places', 'LSUN', 'iSUN', 'birds', 'flowers', 'coil'])
+                        default=['cifar10-compressed'])
 
     parser.add_argument('--batch_size', default=64, type=int)
     parser.add_argument('--eps', default=8 / 255, type=float)
     parser.add_argument('--attack_iters', default=100, type=int)
     parser.add_argument('--adaptive_min_distance', type=float)
-    parser.add_argument('--run_name', default='test', type=str)
+    parser.add_argument('--run_name', default='cifar10', type=str)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--global_min_distance',type=float)
     parser.add_argument('--distance_norm',default="Linf",type=str)
@@ -172,7 +172,7 @@ if __name__ == '__main__':
 
     # load model
     print('\n', test_type)
-    netD.load_state_dict(torch.load(os.path.join(save_dir, 'DNet_' + test_type + run_name)))
+    netD.load_state_dict(torch.load(os.path.join('atd/checkpoints', 'DNet_' + test_type + run_name)))
     netD.eval()
 
     scores_in = [[] for i in epsilons]
@@ -408,7 +408,7 @@ if __name__ == '__main__':
             "compnumber":compnumber
         })
         auc_df = pd.DataFrame(auc_data)
-        file_path = 'atd_auc_1000samples_oldalgo.xlsx'
+        file_path = 'atd_bigmeasurement_11.xlsx'
         # Check if the file exists
         if os.path.exists(file_path):
             # If the file exists, append data to the existing Excel file
