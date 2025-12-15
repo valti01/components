@@ -5,12 +5,15 @@
 ```
 conda create -n env4 python=3.8.5
 conda activate env4
-pip install tensorflow-gpu==2.5.0
 pip install adversarial-robustness-toolbox==1.13.0
-conda install numpy==1.23.5  
-conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 -c pytorch
+y
+conda install numpy==1.23.5  -y
+conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 -c pytorch -y
 pip install git+https://github.com/fra31/auto-attack
+y
 pip install foolbox==3.3.1
+y
+y
 ```
 
 ## Testing

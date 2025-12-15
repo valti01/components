@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from scipy.special import softmax
-
+from resnet_other import PreActResNet
 from resnet import ResNet50
 import torch
 import torchvision
@@ -607,16 +607,17 @@ def main(params, device):
 
 
     model_name = params.model_name
-    from resnet import ResNet, BasicBlock, PreActResNet, PreActBlock
+    from resnet import ResNet, BasicBlock
+    from resnet_other import PreActResNet, PreActBlock
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if model_name == "ramp":
-        backbone = PreActResNet(PreActBlock, [2, 2, 2, 2], num_classes=10) # PreActResNet-18
+        backbone = PreActResNet(PreActBlock, [2, 2, 2, 2], n_cls=10) # PreActResNet-18
         model = torch.nn.Sequential(backbone)
         model = torch.nn.DataParallel(model)
         model = model.to(device)
-        model_path = "ramp.pt"
+        model_path = "ramp_preactresnet.pth"
         checkpoint = torch.load(model_path, map_location=device)
         state_dict = {f"module.0.{k}": v for k, v in checkpoint.items()}
         model.load_state_dict(state_dict)

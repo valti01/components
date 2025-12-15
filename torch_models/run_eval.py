@@ -19,7 +19,7 @@ distance_norms = {
     "Linf": [0.09411764705, 0.18823529411, 0.37647058823, 0.56470588235, 0.75294117647]
 }
 
-model_names = ["ramp","ratio"]
+model_names = ["ramp"]
 
 for model_name in model_names:
     if model_name == "ratio":
@@ -27,6 +27,12 @@ for model_name in model_names:
             distances = distance_norms[dist_norm]
             for dist in distances:
                 for label in targetlabels:
+                    if dist==0.09411764705:
+                        continue
+                    if dist == 0.18823529411:
+                        if label in [0,1,2,3,4,5,6,7]:
+                            continue
+
                     cmd_global = [
                         sys.executable,
                         "eval_auc.py",
@@ -85,7 +91,7 @@ for model_name in model_names:
                         "--targetlabel", str(label),
                         "--out_fname", "2025_11_results.csv"
                     ]
-                    #run_command(cmd_global)
+                    run_command(cmd_global)
 
                     cmd_adaptive = [
                         sys.executable,
@@ -102,6 +108,9 @@ for model_name in model_names:
             distances = distance_norms[dist_norm]
             for dist in distances:
                 for label in targetlabels:
+                    if dist in [0.18823529411, 0.37647058823, 0.56470588235]:
+                        continue
+                    
                     cmd_global = [
                         sys.executable,
                         "eval_auc.py",
