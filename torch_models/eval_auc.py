@@ -824,12 +824,12 @@ def main(params, device):
         print(f"runtime: {hours} hours {minute} minutes {seconds} seconds")
 
     if params.out_fname is not None:
-        is_exist = os.path.exists(params.out_fname)
-        with open(params.out_fname, mode='a+') as out_csv:
-            writer = csv.DictWriter(out_csv, fieldnames=stats[0].keys())
-            if not is_exist:
-                writer.writeheader()
-            writer.writerows(stats)
+      out_path = params.out_fname
+      df = pd.DataFrame(stats)
+      if os.path.exists(out_path):
+          existing_df = pd.read_excel(out_path)
+          df = pd.concat([existing_df, df], ignore_index=True)      
+      df.to_excel(out_path, index=False, engine='openpyxl')
 
 
 def diffscale(diff):
@@ -857,7 +857,7 @@ if __name__ == '__main__':
     # parser.add_argument("--abs_stepsize", type=float, default=0.1)
     parser.add_argument("--eps_in", type=float, default=8/255) #TODO: 8/255
     parser.add_argument("--eps_out", type=float, default=8/255) #TODO: 8/255
-    parser.add_argument("--batch_size", type=int, default=200)
+    parser.add_argument("--batch_size", type=int, default=250)
     parser.add_argument("--adaptive_min_distance", type=float)
     parser.add_argument("--global_min_distance",type=float)
     parser.add_argument("--distance_norm", type=str, default="L2")
